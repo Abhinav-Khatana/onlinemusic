@@ -751,8 +751,10 @@
       }
     });
     // ↓ PLAYLIST / FAVS / SHUFFLE / REPEAT / VOLUME ↓
-let playlist = [], currentIndex = -1, shuffleMode = false, repeatMode = false;
+let playlist = JSON.parse(localStorage.getItem('playlist') || '[]');
+let currentIndex = -1, shuffleMode = false, repeatMode = false;
 const favorites = JSON.parse(localStorage.getItem('ytFavs')||'[]');
+renderPlaylist();
 
 function addToPlaylist(id,title){ playlist.push({id,title}); }
 function saveFavorites(){ localStorage.setItem('ytFavs',JSON.stringify(favorites)); }
@@ -828,19 +830,24 @@ function renderPlaylist() {
       currentIndex = i;
       loadTrack(t.id, t.title);
     };
+
     const btn = document.createElement('button');
     btn.textContent = '×';
     btn.className = 'remove';
     btn.onclick = e => {
       e.stopPropagation();
-      playlist.splice(i,1);
+      playlist.splice(i, 1);
       if (i === currentIndex) currentIndex--;
+      // ← SAVE UPDATED PLAYLIST TO localStorage:
+      localStorage.setItem('playlist', JSON.stringify(playlist));
       renderPlaylist();
     };
+
     li.appendChild(btn);
     playlistEl.appendChild(li);
   });
 }
+
 
 // attach “add to playlist” handlers after results are rendered
 function attachAddButtons() {
@@ -848,8 +855,10 @@ function attachAddButtons() {
     btn.onclick = e => {
       e.stopPropagation();
       const item = playlistItems[idx];
-      playlist.push({ id: item.id.videoId, title: item.snippet.title });
-      renderPlaylist();
+          playlist.push({ id: item.id.videoId, title: item.snippet.title });
+    localStorage.setItem('playlist', JSON.stringify(playlist));
+    renderPlaylist();
+
     };
   });
 }
