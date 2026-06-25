@@ -1,0 +1,2109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Music App</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#000000" />
+<link rel="apple-touch-icon" href="icon.png" />
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #000;
+    color: #f0f0f0;
+    overflow: hidden;
+  }
+  #dynamic-bg {
+    position: absolute; inset: -50px;
+    background-size: cover; background-position: center;
+    filter: blur(80px) saturate(150%); opacity: 0.5;
+    z-index: -2; transition: background-image 1s ease;
+  }
+  .bg-overlay {
+    position: absolute; inset: 0;
+    background: rgba(0, 0, 0, 0.5); z-index: -1;
+  }
+
+  #app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Modal ───────────────────────────────── */
+  #api-modal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.92);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999;
+    backdrop-filter: blur(4px);
+  }
+  .modal-card {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 18px;
+    padding: 36px 28px;
+    width: min(92%, 360px);
+    text-align: center;
+  }
+  .modal-logo { font-size: 42px; margin-bottom: 14px; }
+  .modal-card h2 { font-size: 19px; font-weight: 700; margin-bottom: 6px; }
+  .modal-card p { color: #777; font-size: 12.5px; line-height: 1.6; margin-bottom: 22px; }
+  .modal-card a { color: #fa243c; text-decoration: none; }
+
+  #api-input {
+    width: 100%;
+    padding: 11px 14px;
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 10px;
+    color: #f0f0f0;
+    font-size: 13px;
+    outline: none;
+    margin-bottom: 12px;
+    transition: border-color 0.2s;
+  }
+  #api-input:focus { border-color: #fa243c; }
+  #api-input.err   { border-color: #e74c3c; }
+
+  .btn-green {
+    display: block; width: 100%;
+    padding: 12px;
+    background: #fa243c;
+    color: #000;
+    font-size: 13.5px; font-weight: 700;
+    border: none; border-radius: 50px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .btn-green:hover   { background: #ff4a5c; }
+  .btn-green:active  { transform: scale(0.97); }
+
+  /* ── Content area ────────────────────────── */
+  #content { flex: 1; overflow: hidden; position: relative; }
+
+  .page {
+    position: absolute; inset: 0;
+    overflow-y: auto;
+    padding: 18px 14px 12px;
+    display: none;
+    scroll-behavior: smooth;
+  }
+  .page.active { display: block; }
+  .page::-webkit-scrollbar { width: 3px; }
+  .page::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+  .page-title { font-size: 20px; font-weight: 800; margin-bottom: 3px; letter-spacing: -0.3px; }
+  .page-sub   { font-size: 12px; color: #666; margin-bottom: 16px; }
+
+  /* ── Search bar ──────────────────────────── */
+  .search-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  #search-input {
+    flex: 1;
+    padding: 11px 16px;
+    background: #1a1a1a;
+    border: 1px solid #2c2c2c;
+    border-radius: 50px;
+    color: #f0f0f0;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #search-input:focus { border-color: #fa243c; }
+  .btn-go {
+    padding: 11px 18px;
+    background: #fa243c;
+    color: #000;
+    font-weight: 700; font-size: 13px;
+    border: none; border-radius: 50px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-go:hover { background: #ff4a5c; }
+
+  /* ── Song items ──────────────────────────── */
+  .song-item {
+    display: flex; align-items: center; gap: 11px;
+    padding: 7px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.12s;
+    margin-bottom: 2px;
+  }
+  .song-item:hover           { background: #1a1a1a; }
+  .song-item.now-playing     { background: #1a1a1a; }
+
+  .song-thumb {
+    width: 48px; height: 48px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: #1e1e1e;
+    flex-shrink: 0;
+  }
+  .song-info   { flex: 1; min-width: 0; }
+  .song-title  {
+    font-size: 13.5px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: color 0.15s;
+  }
+  .song-item.now-playing .song-title { color: #fa243c; }
+  .song-ch {
+    font-size: 11.5px; color: #666; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .song-actions { display: flex; align-items: center; }
+  .btn-heart {
+    background: none; border: none;
+    color: #444; font-size: 17px;
+    cursor: pointer; padding: 6px;
+    border-radius: 50%; line-height: 1;
+    transition: color 0.15s, transform 0.12s;
+  }
+  .btn-heart:hover { color: #ccc; transform: scale(1.2); }
+  .btn-heart.saved { color: #fa243c; }
+
+  .btn-more {
+    background: none; border: none; color: #888;
+    cursor: pointer; padding: 4px; border-radius: 50%;
+    transition: color 0.15s; display: flex; align-items: center; justify-content: center;
+  }
+  .btn-more:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+  /* ── State boxes ─────────────────────────── */
+  .s-box { text-align: center; padding: 50px 20px; }
+  .s-box .ico { font-size: 40px; margin-bottom: 12px; }
+  .s-box h3  { font-size: 15px; font-weight: 600; margin-bottom: 5px; }
+  .s-box p { color: #777; font-size: 13px; line-height: 1.5; }
+
+  /* ── Context Menu ─────────────────────────────── */
+  .context-menu {
+    position: fixed; background: rgba(30,30,30,0.95);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 6px 0; z-index: 700;
+    min-width: 180px; display: none; flex-direction: column;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+  }
+  .context-menu.active { display: flex; }
+  .ctx-item {
+    padding: 12px 16px; color: #fff; font-size: 14px;
+    cursor: pointer; text-align: left; background: none; border: none;
+    transition: background 0.15s;
+  }
+  .ctx-item:hover { background: rgba(255,255,255,0.1); }
+
+  /* ── Queue & Playlists ────────────────────────── */
+  #queue-view {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85) !important;
+    backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+    z-index: 600; overflow-y: auto; padding: 80px 30px 300px;
+  }
+  #queue-view.active { display: block; }
+  .queue-header { font-size: 28px; font-weight: 700; margin-bottom: 20px; text-align: center; }
+
+  .playlist-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 16px; margin-bottom: 30px;
+  }
+  .pl-card {
+    background: rgba(255,255,255,0.05); border-radius: 14px;
+    padding: 12px; cursor: pointer; transition: background 0.2s, transform 0.2s;
+    position: relative;
+  }
+  .pl-card:hover { background: rgba(255,255,255,0.1); transform: scale(1.03); }
+  .pl-thumb {
+    width: 100%; aspect-ratio: 1; border-radius: 10px;
+    background: #333; margin-bottom: 10px; object-fit: cover;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+  .pl-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pl-count { font-size: 11px; color: #888; }
+  .pl-delete-btn {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(0,0,0,0.5); border: none; color: #fff;
+    width: 24px; height: 24px; border-radius: 50%; font-size: 14px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .pl-card:hover .pl-delete-btn { opacity: 1; }
+  
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 800; display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .modal-overlay.active { display: flex; }
+
+  /* ── Playlist Detail Page ─────────────────────── */
+  #playlist-detail-page {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.93);
+    backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+    z-index: 550; overflow-y: auto;
+    padding: 24px 20px 200px;
+  }
+  #playlist-detail-page.active { display: block; }
+  .pl-detail-header {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 28px;
+  }
+  .pl-detail-back {
+    background: rgba(255,255,255,0.1); border: none; color: #fff;
+    width: 40px; height: 40px; border-radius: 50%; font-size: 20px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background 0.2s;
+  }
+  .pl-detail-back:hover { background: rgba(255,255,255,0.2); }
+  .pl-detail-info { flex: 1; }
+  .pl-detail-title { font-size: 22px; font-weight: 800; }
+  .pl-detail-count { font-size: 13px; color: #888; margin-top: 4px; }
+  .pl-detail-actions { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+  .pl-action-btn {
+    padding: 10px 20px; border-radius: 50px; border: none;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: transform 0.1s, background 0.15s;
+  }
+  .pl-action-btn:active { transform: scale(0.97); }
+  .pl-play-btn { background: #fa243c; color: #000; }
+  .pl-play-btn:hover { background: #ff4a5c; }
+  .pl-delete-pl-btn { background: rgba(255,255,255,0.1); color: #fff; }
+  .pl-delete-pl-btn:hover { background: rgba(255,0,0,0.3); color: #ff6060; }
+
+  /* ── Now Playing Full View ─────────────────────── */
+  #now-playing-view {
+    position: fixed; inset: 0; z-index: 500;
+    background: transparent;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-end;
+    transform: translateY(100%);
+    transition: transform 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  #now-playing-view.open { transform: translateY(0); }
+  
+  #np-bg {
+    position: absolute; inset: -50px;
+    background-size: cover; background-position: center;
+    filter: blur(60px) saturate(200%) brightness(0.5);
+    z-index: 0;
+    transition: background-image 0.8s ease;
+  }
+  .np-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.7));
+    z-index: 1;
+  }
+  .np-sheet {
+    position: relative; z-index: 2;
+    width: 100%; max-width: 480px;
+    padding: 0 28px 40px;
+    display: flex; flex-direction: column;
+    align-items: center;
+  }
+  /* Top bar: handle only */
+  .np-topbar {
+    width: 100%; display: flex; align-items: center; justify-content: center;
+    padding: 16px 0 8px;
+  }
+  .np-handle {
+    width: 36px; height: 4px; background: rgba(255,255,255,0.35);
+    border-radius: 2px; cursor: pointer;
+  }
+
+  /* ── Mini Lyrics ticker in player bar ──────── */
+  #mini-lyric {
+    font-size: 10px; color: #fa243c; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    opacity: 0; transition: opacity 0.4s;
+    font-style: italic;
+  }
+  #mini-lyric.visible { opacity: 1; }
+
+  /* ── Recently Played ─────────────────────── */
+  .recent-scroll {
+    display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;
+    scrollbar-width: none;
+  }
+  .recent-scroll::-webkit-scrollbar { display: none; }
+  .recent-card {
+    flex-shrink: 0; width: 88px; cursor: pointer;
+    transition: transform 0.18s;
+  }
+  .recent-card:hover { transform: scale(1.06); }
+  .recent-card img {
+    width: 88px; height: 88px; border-radius: 12px; object-fit: cover;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5); display: block; margin-bottom: 7px;
+  }
+  .recent-card-title {
+    font-size: 11.5px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .recent-card-ch {
+    font-size: 10px; color: #666; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ── Sleep Timer UI ─────────────────────── */
+  #sleep-timer-panel {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateY(100%);
+    width: min(100%, 480px);
+    background: rgba(22,22,22,0.97); backdrop-filter: blur(30px);
+    border-radius: 24px 24px 0 0; padding: 24px 28px 48px;
+    z-index: 700; transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  #sleep-timer-panel.open { transform: translateX(-50%) translateY(0); }
+  .sleep-panel-title { font-size: 17px; font-weight: 700; margin-bottom: 20px; text-align: center; }
+  .sleep-opts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px; }
+  .sleep-opt {
+    padding: 10px 18px; border-radius: 50px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .sleep-opt:hover { background: rgba(250,36,60,0.25); border-color: #fa243c; }
+  .sleep-opt.active { background: #fa243c; border-color: #fa243c; color: #000; }
+  #sleep-cancel-btn {
+    display: block; width: 100%; padding: 12px;
+    background: rgba(255,255,255,0.06); border: none;
+    color: #888; font-size: 13px; border-radius: 50px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  #sleep-cancel-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  #sleep-timer-badge {
+    position: absolute; top: 4px; right: 4px;
+    background: #fa243c; color: #000; font-size: 8px; font-weight: 800;
+    border-radius: 50%; width: 14px; height: 14px;
+    display: none; align-items: center; justify-content: center;
+  }
+
+  #np-art {
+    width: 100%; max-width: 300px; aspect-ratio: 1;
+    border-radius: 18px; object-fit: cover;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.7);
+    margin: 20px 0 32px;
+    transition: transform 0.3s ease;
+  }
+  #np-art.playing { transform: scale(1.04); }
+  .np-meta {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .np-meta-text { flex: 1; min-width: 0; }
+  .np-song-title {
+    font-size: 22px; font-weight: 700;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .np-song-artist {
+    font-size: 15px; color: rgba(255,255,255,0.6); margin-top: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .np-heart-btn {
+    background: none; border: none; color: rgba(255,255,255,0.5);
+    font-size: 26px; cursor: pointer; padding: 6px;
+    transition: color 0.15s, transform 0.1s;
+    flex-shrink: 0;
+  }
+  .np-heart-btn.saved { color: #fa243c; }
+  .np-heart-btn:active { transform: scale(1.2); }
+
+  /* progress */
+  #np-prog-wrap { width: 100%; margin-bottom: 10px; }
+  #np-prog-bar {
+    width: 100%; height: 4px; background: rgba(255,255,255,0.2);
+    border-radius: 2px; cursor: pointer; position: relative;
+  }
+  #np-prog-fill {
+    height: 100%; width: 0%; background: #fff;
+    border-radius: 2px; pointer-events: none;
+    transition: width 0.45s linear;
+  }
+  .np-time-row {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: rgba(255,255,255,0.45); margin-top: 6px;
+  }
+
+  /* controls */
+  .np-controls {
+    width: 100%; display: flex; align-items: center;
+    justify-content: space-between; margin: 20px 0 28px;
+  }
+  .np-ctrl-btn {
+    background: none; border: none; color: rgba(255,255,255,0.7);
+    cursor: pointer; padding: 8px;
+    transition: color 0.15s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .np-ctrl-btn:hover { color: #fff; transform: scale(1.1); }
+  .np-ctrl-btn.active { color: #fa243c; }
+  #np-pp-btn {
+    width: 68px; height: 68px; border-radius: 50%;
+    background: #fff; border: none; color: #000;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  #np-pp-btn:active { transform: scale(0.93); }
+  #np-pp-btn svg { width: 30px; height: 30px; }
+
+  /* bottom row */
+  .np-bottom-row {
+    width: 100%; display: flex; align-items: center; gap: 10px;
+  }
+  #np-vol-slider {
+    flex: 1; -webkit-appearance: none; height: 4px;
+    background: rgba(255,255,255,0.25); border-radius: 2px;
+    outline: none; cursor: pointer;
+  }
+  #np-vol-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px;
+    background: #fff; border-radius: 50%;
+  }
+  .np-action-btn {
+    background: none; border: none; color: rgba(255,255,255,0.6);
+    cursor: pointer; padding: 6px;
+    transition: color 0.15s;
+    display: flex; align-items: center;
+  }
+  .np-action-btn:hover { color: #fff; }
+
+  /* player bar tap zone */
+  #player-bar { cursor: pointer; }
+
+  /* ── Player bar ──────────────────────────── */
+  #player-bar {
+    background: rgba(28, 28, 30, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 9px 14px 5px;
+    flex-shrink: 0;
+    display: none;
+  }
+  .np-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px;
+  }
+  #np-thumb {
+    width: 38px; height: 38px;
+    border-radius: 6px; object-fit: cover;
+    background: #1e1e1e; flex-shrink: 0;
+  }
+  .np-info  { flex: 1; min-width: 0; }
+  #np-title {
+    font-size: 13px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #np-ch {
+    font-size: 11px; color: #666; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .np-ctrl { display: flex; align-items: center; gap: 8px; }
+
+  #pp-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: #fa243c;
+    border: none; color: #000;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+    flex-shrink: 0;
+  }
+  #pp-btn:hover  { background: #ff4a5c; }
+  #pp-btn:active { transform: scale(0.94); }
+  #pp-btn svg    { width: 17px; height: 17px; }
+
+  #prog-bar {
+    width: 100%; height: 3px;
+    background: #2a2a2a;
+    border-radius: 2px;
+    cursor: pointer;
+    margin-bottom: 4px;
+  }
+  #prog-fill {
+    height: 100%; width: 0%;
+    background: #fa243c;
+    border-radius: 2px;
+    transition: width 0.45s linear;
+    pointer-events: none;
+  }
+  .time-row {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: #555;
+  }
+
+  /* ── EQ animation ────────────────────────── */
+  @keyframes wave {
+    0%,100% { transform: scaleY(0.4); }
+    50%      { transform: scaleY(1.2); }
+  }
+  .eq-bars { display: flex; gap: 2px; align-items: flex-end; height: 14px; flex-shrink: 0; }
+  .eq-bar  {
+    width: 3px; border-radius: 1px;
+    background: #fa243c;
+    animation: wave 0.8s ease-in-out infinite;
+  }
+  .eq-bar:nth-child(2) { animation-delay: 0.15s; }
+  .eq-bar:nth-child(3) { animation-delay: 0.3s;  }
+
+  /* ── Bottom nav ──────────────────────────── */
+  #bottom-nav {
+    background: rgba(28, 28, 30, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-shrink: 0;
+  }
+  .nav-btn {
+    flex: 1; background: none; border: none;
+    color: #555;
+    padding: 9px 4px 10px;
+    cursor: pointer;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 3px;
+    font-size: 9.5px; font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+  .nav-btn.active           { color: #fa243c; }
+  .nav-btn:hover:not(.active) { color: #999; }
+  .nav-btn svg { width: 21px; height: 21px; }
+
+  .icon-btn {
+    background: none; border: none; color: #888;
+    cursor: pointer; padding: 6px;
+    border-radius: 50%;
+    transition: color 0.15s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:hover { color: #fff; transform: scale(1.1); }
+  .icon-btn.active { color: #fa243c; }
+  
+  .hidden-mobile { display: none !important; }
+  
+  #vol-slider {
+    -webkit-appearance: none;
+    width: 80px; height: 4px;
+    background: #444; border-radius: 2px;
+    outline: none; cursor: pointer;
+  }
+  #vol-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    background: #fff; border-radius: 50%;
+  }
+
+  /* ── Desktop & Tablet Layout ──────────────────────────── */
+  @media (min-width: 768px) {
+    #app {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      grid-template-rows: 1fr auto;
+      grid-template-areas:
+        "nav content"
+        "player player";
+    }
+    #content { grid-area: content; }
+    #player-bar { grid-area: player; padding: 16px 24px 12px; }
+    #bottom-nav {
+      grid-area: nav;
+      flex-direction: column;
+      justify-content: flex-start;
+      border-top: none;
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 32px;
+      gap: 6px;
+    }
+    .nav-btn {
+      flex: none;
+      flex-direction: row;
+      padding: 14px 20px;
+      font-size: 14px;
+      font-weight: 700;
+      gap: 16px;
+      margin: 0 16px;
+      width: calc(100% - 32px);
+      border-radius: 8px;
+    }
+    .nav-btn svg { width: 24px; height: 24px; }
+    .nav-btn.active { background: rgba(255, 255, 255, 0.05); color: #fff; }
+    .nav-btn.active svg { color: #fa243c; }
+
+    .hidden-mobile { display: flex !important; }
+
+    .page { padding: 40px 48px; }
+    .page-title { font-size: 34px; margin-bottom: 6px; }
+    .page-sub { font-size: 14px; margin-bottom: 28px; }
+    
+    #home-list, #search-list, #library-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .song-item { padding: 12px 14px; margin-bottom: 0; }
+    .song-thumb { width: 56px; height: 56px; }
+    .song-title { font-size: 14.5px; }
+    .song-ch { font-size: 12.5px; margin-top: 4px; }
+    
+    .search-row { max-width: 480px; margin-bottom: 24px; }
+    #search-input { padding: 14px 20px; font-size: 14px; }
+    .btn-go { padding: 14px 24px; font-size: 14px; }
+  }
+  
+  /* ── Lyrics View ──────────────────────────── */
+  #lyrics-view {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7) !important;
+    backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+    z-index: 600; overflow-y: auto; padding-top: 80px;
+    scroll-behavior: smooth;
+  }
+  #lyrics-view.active { display: block; }
+  #lyrics-view::-webkit-scrollbar { display: none; }
+  #lyrics-container { max-width: 800px; margin: 0 auto; padding: 0 30px 300px; }
+  .lyric-line {
+    font-size: 28px; font-weight: 700; color: rgba(255, 255, 255, 0.3);
+    margin-bottom: 24px; transition: color 0.3s, transform 0.3s;
+    cursor: pointer; transform-origin: left;
+  }
+  .lyric-line:hover { color: rgba(255, 255, 255, 0.6); }
+  .lyric-line.active { color: #fff; transform: scale(1.05); }
+  @media (min-width: 768px) {
+    .lyric-line { font-size: 42px; margin-bottom: 36px; }
+  }
+</style>
+</head>
+<body>
+<div id="dynamic-bg"></div>
+<div class="bg-overlay"></div>
+
+<!-- Hidden YouTube player -->
+<div style="position:fixed;width:300px;height:300px;top:0;left:0;overflow:hidden;opacity:0.01;pointer-events:none;z-index:-1;">
+  <div id="yt-player"></div>
+</div>
+
+<!-- API Key Modal -->
+<div id="api-modal">
+  <div class="modal-card">
+    <div class="modal-logo">🎵</div>
+    <h2>Music Streaming</h2>
+    <p>Paste your <strong>YouTube Data API v3</strong> key to start listening.</p>
+    <p id="api-modal-msg" style="display:none; color:#e74c3c; font-size:11.5px; line-height:1.5; margin-bottom:14px;"></p>
+    <input type="password" id="api-input" placeholder="AIzaSy..." autocomplete="off" />
+    <button class="btn-green" id="start-btn">Start Listening</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+
+  <!-- Now Playing Full View -->
+  <div id="now-playing-view">
+    <div id="np-bg"></div>
+    <div class="np-overlay"></div>
+    <div class="np-sheet">
+      <div class="np-topbar">
+        <div class="np-handle" id="np-handle"></div>
+      </div>
+      <img id="np-art" src="" alt="Album Art" />
+      <div class="np-meta">
+        <div class="np-meta-text">
+          <div class="np-song-title" id="np-full-title">—</div>
+          <div class="np-song-artist" id="np-full-artist">—</div>
+        </div>
+        <button class="np-heart-btn" id="np-full-heart">♡</button>
+      </div>
+      <div id="np-prog-wrap">
+        <div id="np-prog-bar"><div id="np-prog-fill"></div></div>
+        <div class="np-time-row">
+          <span id="np-cur-t">0:00</span>
+          <span id="np-tot-t">0:00</span>
+        </div>
+      </div>
+      <div class="np-controls">
+        <button class="np-ctrl-btn" id="np-shuffle">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+        </button>
+        <button class="np-ctrl-btn" id="np-prev">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="34" height="34"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </button>
+        <button id="np-pp-btn">
+          <svg id="np-pp-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="np-ctrl-btn" id="np-next">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="34" height="34"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+        </button>
+        <button class="np-ctrl-btn" id="np-repeat">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+        </button>
+      </div>
+      <div class="np-bottom-row">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style="color:rgba(255,255,255,0.4); flex-shrink:0;"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/></svg>
+        <input type="range" id="np-vol-slider" min="0" max="100" value="100" />
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style="color:rgba(255,255,255,0.4); flex-shrink:0;"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        <button class="np-action-btn" id="np-lyrics-btn" title="Lyrics" style="margin-left:8px;">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/></svg>
+        </button>
+        <button class="np-action-btn" id="np-queue-btn" title="Queue" style="margin-left:4px;">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
+        </button>
+        <button class="np-action-btn" id="np-sleep-btn" title="Sleep Timer" style="margin-left:4px; position:relative;">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M17.75 4.09l-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94 3.17-.09L12 1l1.05 3 3.17.09zM21 12h-2a7 7 0 0 1-7 7 7 7 0 0 1-7-7A7 7 0 0 1 12 5V3a9 9 0 0 0-9 9 9 9 0 0 0 9 9 9 9 0 0 0 9-9h-2z"/></svg>
+          <span id="sleep-timer-badge"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Queue View -->
+  <div id="queue-view">
+    <button id="close-queue" style="position: fixed; top: 20px; right: 20px; background: rgba(255,255,255,0.1); border: none; color: #fff; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 610; backdrop-filter: blur(5px); transition: background 0.2s;">&times;</button>
+    <div style="max-width: 600px; margin: 0 auto;">
+      <div class="queue-header">Up Next</div>
+      <div id="queue-list"></div>
+    </div>
+  </div>
+
+  <!-- Lyrics View -->
+  <div id="lyrics-view">
+    <button id="close-lyrics" style="position: fixed; top: 20px; right: 20px; background: rgba(255,255,255,0.1); border: none; color: #fff; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 610; backdrop-filter: blur(5px); transition: background 0.2s;">&times;</button>
+    <div id="lyrics-container"></div>
+  </div>
+
+  <!-- Playlist Detail Page -->
+  <div id="playlist-detail-page">
+    <div class="pl-detail-header">
+      <button class="pl-detail-back" id="pl-detail-back">&#8592;</button>
+      <div class="pl-detail-info">
+        <div class="pl-detail-title" id="pl-detail-title">Playlist</div>
+        <div class="pl-detail-count" id="pl-detail-count">0 songs</div>
+      </div>
+    </div>
+    <div class="pl-detail-actions">
+      <button class="pl-action-btn pl-play-btn" id="pl-play-all-btn">&#9654; Play All</button>
+      <button class="pl-action-btn pl-delete-pl-btn" id="pl-delete-btn">&#128465; Delete Playlist</button>
+    </div>
+    <div id="pl-detail-list"></div>
+  </div>
+
+  <div id="content">
+
+    <!-- Context Menu & Modals -->
+    <div class="context-menu" id="ctx-menu">
+      <button class="ctx-item" id="ctx-play-next">Play Next</button>
+      <button class="ctx-item" id="ctx-add-queue">Add to Queue</button>
+      <button class="ctx-item" id="ctx-add-playlist">Add to Playlist...</button>
+    </div>
+
+    <div class="modal-overlay" id="pl-modal">
+      <div class="modal-card">
+        <h2>Add to Playlist</h2>
+        <div id="pl-select-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 16px; text-align: left; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 8px;"></div>
+        <input type="text" id="new-pl-name" placeholder="New playlist name..." style="width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; margin-bottom: 12px; outline: none;">
+        <button class="btn-green" id="create-pl-btn" style="width: 100%;">Create &amp; Add</button>
+        <button id="close-pl-modal" style="margin-top: 12px; background: none; border: none; color: #888; cursor: pointer;">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Home -->
+    <div id="home-page" class="page active">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div class="page-title">Good day 👋</div>
+          <div class="page-sub">Trending music right now</div>
+        </div>
+        <button id="install-btn" class="btn-go" style="display: none; font-size: 11px; padding: 8px 14px; background: #fa243c; color: #000; border: none; border-radius: 50px; cursor: pointer; font-weight: bold;">Install App</button>
+      </div>
+      <!-- Recently Played -->
+      <div id="recently-played-section" style="display:none; margin-bottom: 24px;">
+        <div style="font-size:13px; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:12px;">Recently Played</div>
+        <div class="recent-scroll" id="recent-list"></div>
+      </div>
+      <div id="home-list"><div class="s-loading">Enter your API key to load music…</div></div>
+    </div>
+
+    <!-- Search -->
+    <div id="search-page" class="page">
+      <div class="page-title">Search</div>
+      <div class="search-row">
+        <input type="text" id="search-input" placeholder="Songs, artists, albums…" />
+        <button class="btn-go" id="go-btn">Go</button>
+      </div>
+      <div id="search-list">
+        <div class="s-box">
+          <div class="ico">🔍</div>
+          <h3>Search for anything</h3>
+          <p>Find songs, artists, or albums</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Library -->
+    <div id="library-page" class="page">
+      <div class="page-title" style="margin-bottom: 20px;">Your Playlists</div>
+      <div id="pl-grid" class="playlist-grid"></div>
+      <div class="page-sub" style="margin-top: 30px;">Liked Songs</div>
+      <div id="lib-list">
+        <div class="s-box">
+          <div class="ico">🎧</div>
+          <h3>Nothing saved yet</h3>
+          <p>Tap ♡ on any song to save it here</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Player Bar -->
+  <div id="player-bar">
+    <div class="np-row">
+      <img id="np-thumb" src="" alt="" />
+      <div class="np-info">
+        <div id="np-title">Nothing playing</div>
+        <div id="np-ch">—</div>
+        <div id="mini-lyric"></div>
+      </div>
+      <div class="np-ctrl">
+        <button class="icon-btn" id="lyrics-btn" title="Lyrics" style="margin-right: 8px;">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/></svg>
+        </button>
+        <button class="icon-btn hidden-mobile" id="shuffle-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+        </button>
+        <div class="eq-bars" id="eq" style="display:none;">
+          <div class="eq-bar" style="height:10px;"></div>
+          <div class="eq-bar" style="height:14px;"></div>
+          <div class="eq-bar" style="height:8px;"></div>
+        </div>
+        <button id="pp-btn">
+          <svg id="pp-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </button>
+        <button class="icon-btn hidden-mobile" id="repeat-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+        </button>
+        <div class="hidden-mobile" style="align-items: center; gap: 8px; margin-left: 12px;">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="color: #888;"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+          <input type="range" id="vol-slider" min="0" max="100" value="100" />
+        </div>
+        <button class="icon-btn" id="queue-btn" title="Queue" style="margin-left: 8px;">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div>
+      <div id="prog-bar"><div id="prog-fill"></div></div>
+      <div class="time-row">
+        <span id="cur-t">0:00</span>
+        <span id="tot-t">0:00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <div id="bottom-nav">
+    <button class="nav-btn active" id="nav-home">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      Home
+    </button>
+    <button class="nav-btn" id="nav-search">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      Search
+    </button>
+    <button class="nav-btn" id="nav-library">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+      Library
+    </button>
+  </div>
+
+</div>
+
+<!-- Sleep Timer Panel -->
+<div id="sleep-timer-panel">
+  <div class="sleep-panel-title">⏰ Sleep Timer</div>
+  <div class="sleep-opts">
+    <button class="sleep-opt" data-min="5">5 min</button>
+    <button class="sleep-opt" data-min="10">10 min</button>
+    <button class="sleep-opt" data-min="15">15 min</button>
+    <button class="sleep-opt" data-min="30">30 min</button>
+    <button class="sleep-opt" data-min="45">45 min</button>
+    <button class="sleep-opt" data-min="60">1 hour</button>
+  </div>
+  <button id="sleep-cancel-btn">Cancel Timer</button>
+</div>
+
+<script type="module">
+'use strict';
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+if (window.location.protocol === 'file:') {
+  alert("Please open this app using Live Server! The YouTube player uses background communication that gets blocked by browsers when opening files directly via double-click (file://).");
+}
+
+// ── State ──────────────────────────────────────────────
+var API_KEY      = 'AIzaSyCMkZ4GN-lPae8CG2OKgnl6Ugk7O-LcWHU';
+var ytPlayer     = null;
+var ytReady      = false;
+var curSong      = null;
+var playing      = false;
+var progTimer    = null;
+var library      = [];
+var songs        = {};   // videoId → song obj
+var songHistory  = [];   // for prev song navigation
+var activeTab    = 'home';
+var currentLyrics = [];
+var queue        = [];   // Up Next queue
+var playlists    = [];   // Custom playlists
+var ctxSong      = null; // Context menu target song
+var shuffleOn    = false;
+var repeatOn     = false;
+var curPlaylistId = null; // For playlist detail view
+var recentPlayed = []; // Recently played songs (max 20)
+var sleepTimer   = null; // Sleep timer countdown-tick interval ID
+var sleepTimeout = null; // Sleep timer exact-fire timeout ID
+var sleepMins    = 0;    // Sleep timer minutes remaining
+var miniLyricIdx = -1;   // Tracks last mini-lyric shown
+
+// ── Resume preferences (volume / shuffle / repeat / last song) ─────────
+var PREFS_KEY = 'musicapp_prefs_v1';
+function loadPrefs() {
+  try {
+    var raw = localStorage.getItem(PREFS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      volume:  document.getElementById('vol-slider').value,
+      shuffle: shuffleOn,
+      repeat:  repeatOn,
+      lastSong: curSong ? {
+        videoId: curSong.videoId, title: curSong.title, ch: curSong.ch, thumb: curSong.thumb
+      } : null
+    }));
+  } catch (e) {}
+}
+function restorePrefs() {
+  var prefs = loadPrefs();
+  if (!prefs) return;
+
+  if (typeof prefs.volume !== 'undefined') {
+    document.getElementById('vol-slider').value    = prefs.volume;
+    document.getElementById('np-vol-slider').value = prefs.volume;
+    if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(prefs.volume);
+  }
+  if (prefs.shuffle) {
+    shuffleOn = true;
+    document.getElementById('shuffle-btn').classList.add('active');
+    document.getElementById('np-shuffle').classList.add('active');
+  }
+  if (prefs.repeat) {
+    repeatOn = true;
+    document.getElementById('repeat-btn').classList.add('active');
+    document.getElementById('np-repeat').classList.add('active');
+  }
+  if (prefs.lastSong && prefs.lastSong.videoId) {
+    var s = prefs.lastSong;
+    songs[s.videoId] = s;
+    curSong = s;
+    document.getElementById('np-thumb').src              = s.thumb;
+    document.getElementById('np-title').textContent      = s.title;
+    document.getElementById('np-ch').textContent         = s.ch;
+    document.getElementById('player-bar').style.display  = 'block';
+    document.getElementById('dynamic-bg').style.backgroundImage = 'url(' + s.thumb + ')';
+    document.getElementById('np-art').src                = s.thumb;
+    document.getElementById('np-bg').style.backgroundImage = 'url(' + s.thumb + ')';
+    document.getElementById('np-full-title').textContent  = s.title;
+    document.getElementById('np-full-artist').textContent = s.ch;
+    // Cue (don't autoplay — browsers block that anyway) so hitting ▶ resumes instantly
+    if (ytPlayer && ytPlayer.cueVideoById) ytPlayer.cueVideoById(s.videoId);
+  }
+}
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDHvxNkncy8tEQh6s5XC15GRAwi9S24syQ",
+  authDomain: "themusic-99cbb.firebaseapp.com",
+  projectId: "themusic-99cbb",
+  storageBucket: "themusic-99cbb.firebasestorage.app",
+  messagingSenderId: "74785297616",
+  appId: "1:74785297616:web:3234ef493730798d583ad5"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ── High-res thumbnail helper ─────────────────────────
+function getHQThumb(videoId) {
+  return 'https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg';
+}
+
+// Not every browser supports every Media Session action — registering an
+// unsupported one throws, so wrap it.
+function setMSHandler(action, fn) {
+  try { navigator.mediaSession.setActionHandler(action, fn); } catch (e) {}
+}
+
+// Realtime Library Sync
+onSnapshot(collection(db, "library"), (snapshot) => {
+  library = [];
+  snapshot.forEach((doc) => {
+    library.push(doc.data());
+  });
+  if (activeTab === 'library') renderLibrary();
+  
+  // Sync hearts for items on screen
+  Object.keys(songs).forEach(vid => {
+    syncHeart(vid, library.some(s => s.videoId === vid));
+  });
+  // Sync NP heart if song playing
+  if (curSong) {
+    var saved = library.some(s => s.videoId === curSong.videoId);
+    var npHeart = document.getElementById('np-full-heart');
+    npHeart.textContent = saved ? '♥' : '♡';
+    npHeart.className = 'np-heart-btn' + (saved ? ' saved' : '');
+  }
+});
+
+// Realtime Playlists Sync
+onSnapshot(collection(db, "playlists"), (snapshot) => {
+  playlists = [];
+  snapshot.forEach((d) => {
+    playlists.push({ id: d.id, ...d.data() });
+  });
+  if (activeTab === 'library') renderPlaylists();
+  // If playlist detail is open, refresh it
+  if (document.getElementById('playlist-detail-page').classList.contains('active') && curPlaylistId) {
+    var updatedPl = playlists.find(p => p.id === curPlaylistId);
+    if (updatedPl) renderPlaylistDetail(updatedPl);
+    else closePlaylistDetail();
+  }
+});
+
+// ── PWA & Install ──────────────────────────────────────
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-btn').style.display = 'block';
+});
+
+document.getElementById('install-btn').addEventListener('click', async () => {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      document.getElementById('install-btn').style.display = 'none';
+    }
+    deferredPrompt = null;
+  }
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW Error:', err));
+  });
+}
+
+// Safety net: make sure prefs are saved even if the PWA is closed/swiped
+// away without a button click triggering a save.
+window.addEventListener('pagehide', savePrefs);
+
+// ── YouTube IFrame API ─────────────────────────────────
+(function() {
+  var s = document.createElement('script');
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+})();
+
+window.onYouTubeIframeAPIReady = function() {
+  ytPlayer = new YT.Player('yt-player', {
+    height: '100%', width: '100%',
+    playerVars: { autoplay: 0, controls: 0, rel: 0, fs: 0, modestbranding: 1 },
+    events: {
+      onReady:       function() { ytReady = true; restorePrefs(); },
+      onStateChange: onYTState,
+      onError:       function(e) { 
+        console.warn('YT error:', e.data); 
+        if (e.data === 150 || e.data === 101) {
+          document.getElementById('np-title').textContent = 'Video blocked by YouTube';
+          document.getElementById('np-ch').textContent = 'Please try another song';
+          playing = false;
+          syncBtn();
+        }
+      }
+    }
+  });
+};
+
+function onYTState(e) {
+  switch (e.data) {
+    case YT.PlayerState.PLAYING:
+      playing = true;  syncBtn(); startProg(); showEQ(true);  break;
+    case YT.PlayerState.PAUSED:
+      playing = false; syncBtn(); stopProg();  showEQ(false); break;
+    case YT.PlayerState.ENDED:
+      playing = false; syncBtn(); stopProg();  showEQ(false);
+      setTime(0, 0);
+      if (repeatOn) {
+        // Replay same song
+        if (curSong && ytPlayer && ytPlayer.loadVideoById) {
+          ytPlayer.loadVideoById(curSong.videoId);
+          playing = true; syncBtn();
+        }
+      } else {
+        playNext();
+      }
+      break;
+  }
+}
+
+// ── App init ───────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', startApp);
+document.getElementById('api-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') startApp();
+});
+
+if (API_KEY) {
+  document.getElementById('api-modal').style.display = 'none';
+  fetchHome();
+}
+
+function startApp() {
+  var k = document.getElementById('api-input').value.trim();
+  if (!k) { shake(); return; }
+  API_KEY = k;
+  document.getElementById('api-modal').style.display = 'none';
+  var msgEl = document.getElementById('api-modal-msg');
+  if (msgEl) msgEl.style.display = 'none';
+  fetchHome();
+}
+
+function shake() {
+  var inp = document.getElementById('api-input');
+  inp.classList.add('err');
+  setTimeout(function() { inp.classList.remove('err'); }, 900);
+}
+
+// If the key is invalid, restricted, or has hit its daily quota, YouTube
+// returns a clear reason instead of a generic error — catch that and send
+// the person back to the key screen instead of a dead-end error box.
+function isKeyIssue(msg) {
+  return /quota|API key not valid|key is invalid|disabled|forbidden|exceeded/i.test(msg || '');
+}
+function showApiKeyModal(reason) {
+  var msgEl = document.getElementById('api-modal-msg');
+  if (msgEl) {
+    msgEl.textContent = reason ? ('YouTube says: ' + reason) : '';
+    msgEl.style.display = reason ? 'block' : 'none';
+  }
+  document.getElementById('api-modal').style.display = 'flex';
+}
+function handleApiError(targetId, msg) {
+  if (isKeyIssue(msg)) showApiKeyModal(msg);
+  else showErr(targetId, msg);
+}
+
+// ── Navigation ─────────────────────────────────────────
+document.getElementById('nav-home').addEventListener('click',    function() { setTab('home');    });
+document.getElementById('nav-search').addEventListener('click',  function() { setTab('search');  });
+document.getElementById('nav-library').addEventListener('click', function() { setTab('library'); });
+
+function setTab(tab) {
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById(tab + '-page').classList.add('active');
+  document.getElementById('nav-' + tab).classList.add('active');
+  activeTab = tab;
+  if (tab === 'library') renderLibrary();
+}
+
+// ── Home ───────────────────────────────────────────────
+function fetchHome() {
+  show('home-list', '<div class="s-loading">Loading trending music…</div>');
+  yfetch(
+    'https://www.googleapis.com/youtube/v3/search'
+    + '?part=snippet&type=video&videoEmbeddable=true&videoSyndicated=true&videoCategoryId=10'
+    + '&q=top+music+hits&maxResults=25&order=viewCount&key=' + API_KEY,
+    function(data) { renderList(data.items || [], 'home-list'); },
+    function(msg)  { handleApiError('home-list', msg); }
+  );
+}
+
+// ── Search ─────────────────────────────────────────────
+document.getElementById('go-btn').addEventListener('click', doSearch);
+document.getElementById('search-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doSearch();
+});
+
+function doSearch() {
+  var q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+  show('search-list', '<div class="s-loading">Searching for "' + esc(q) + '"…</div>');
+  yfetch(
+    'https://www.googleapis.com/youtube/v3/search'
+    + '?part=snippet&type=video&videoEmbeddable=true&videoSyndicated=true&q=' + encodeURIComponent(q)
+    + '&maxResults=25&key=' + API_KEY,
+    function(data) {
+      if (!data.items || !data.items.length)
+        showEmpty('search-list', '🔍', 'No results', 'Try different keywords');
+      else
+        renderList(data.items, 'search-list');
+    },
+    function(msg) { handleApiError('search-list', msg); }
+  );
+}
+
+// ── Render song list ───────────────────────────────────
+function renderList(items, targetId) {
+  var valid = items.filter(function(i) { return i.id && i.id.videoId; });
+  if (!valid.length) { showEmpty(targetId, '🎵', 'Nothing found', 'Try a different search'); return; }
+
+  var html = '';
+  valid.forEach(function(item) {
+    var vid    = item.id.videoId;
+    var snip   = item.snippet || {};
+    var thumb  = getHQThumb(vid);
+    var title  = snip.title        || 'Unknown';
+    var ch     = snip.channelTitle || 'Unknown';
+
+    songs[vid] = { videoId: vid, title: title, ch: ch, thumb: thumb };
+
+    var saved = library.some(function(s) { return s.videoId === vid; });
+    var isNow = curSong && curSong.videoId === vid;
+
+    html += '<div class="song-item' + (isNow ? ' now-playing' : '') + '" id="si-' + vid + '">';
+    html += '<img class="song-thumb" src="' + esc(thumb) + '" loading="lazy" />';
+    html += '<div class="song-info">';
+    html += '<div class="song-title">' + esc(title) + '</div>';
+    html += '<div class="song-ch">'    + esc(ch)    + '</div>';
+    html += '</div>';
+    html += '<div class="song-actions">';
+    html += '<button class="btn-heart' + (saved ? ' saved' : '') + '" id="hb-' + vid + '" aria-label="Save">';
+    html += saved ? '♥' : '♡';
+    html += '</button>';
+    html += '<button class="btn-more" id="more-' + vid + '">⋮</button>';
+    html += '</div>';
+    html += '</div>';
+  });
+
+  show(targetId, html);
+
+  valid.forEach(function(item) {
+    var vid = item.id.videoId;
+    var row = document.getElementById('si-' + vid);
+    var hb  = document.getElementById('hb-' + vid);
+    if (row) row.addEventListener('click', function() { playSong(vid); });
+    if (hb)  hb.addEventListener('click',  function(e) { e.stopPropagation(); toggleSave(vid); });
+    var mb = document.getElementById('more-' + vid);
+    if (mb) mb.addEventListener('click', function(e) { e.stopPropagation(); openCtx(e, vid); });
+  });
+}
+
+function renderLibrary() {
+  renderPlaylists();
+  if (!library.length) {
+    showEmpty('lib-list', '🎧', 'Nothing saved yet', 'Tap ♡ on any song to save it here');
+    return;
+  }
+  var html = '';
+  library.forEach(function(song) {
+    var isNow = curSong && curSong.videoId === song.videoId;
+    html += '<div class="song-item' + (isNow ? ' now-playing' : '') + '" id="sil-' + song.videoId + '">';
+    html += '<img class="song-thumb" src="' + esc(song.thumb) + '" />';
+    html += '<div class="song-info">';
+    html += '<div class="song-title">' + esc(song.title) + '</div>';
+    html += '<div class="song-ch">'    + esc(song.ch)    + '</div>';
+    html += '</div>';
+    html += '<div class="song-actions">';
+    html += '<button class="btn-heart saved" id="hbl-' + song.videoId + '" aria-label="Remove">♥</button>';
+    html += '<button class="btn-more" id="morel-' + song.videoId + '">⋮</button>';
+    html += '</div>';
+    html += '</div>';
+  });
+  show('lib-list', html);
+
+  library.forEach(function(song) {
+    var vid = song.videoId;
+    var row = document.getElementById('sil-' + vid);
+    var hb  = document.getElementById('hbl-' + vid);
+    var mb  = document.getElementById('morel-' + vid);
+    if (row) row.addEventListener('click', function() { playSong(vid); });
+    if (hb)  hb.addEventListener('click',  function(e) { e.stopPropagation(); toggleSave(vid); });
+    if (mb)  mb.addEventListener('click',  function(e) { e.stopPropagation(); openCtx(e, vid); });
+  });
+}
+
+// ── Playback ───────────────────────────────────────────
+function playSong(vid, skipHistory) {
+  var song = songs[vid] || library.find(function(s) { return s.videoId === vid; });
+  // Also search playlists for the song
+  if (!song) {
+    playlists.forEach(function(pl) {
+      if (pl.songs) {
+        var found = pl.songs.find(function(s) { return s.videoId === vid; });
+        if (found) song = found;
+      }
+    });
+  }
+  if (!song) return;
+
+  // Push current song to history before switching (skipped when navigating
+  // backwards via playPrev(), otherwise every "Previous" press would shove
+  // the song you're leaving right back onto the stack and you'd just
+  // ping-pong between the last two songs forever)
+  if (curSong && curSong.videoId !== vid && !skipHistory) {
+    songHistory.push(curSong);
+    if (songHistory.length > 50) songHistory.shift();
+  }
+
+  document.querySelectorAll('.song-item.now-playing').forEach(function(el) {
+    el.classList.remove('now-playing');
+  });
+
+  curSong = song;
+  // Ensure HQ thumb
+  if (curSong.videoId) curSong.thumb = getHQThumb(curSong.videoId);
+
+  // Add to recently played
+  recentPlayed = recentPlayed.filter(s => s.videoId !== curSong.videoId);
+  recentPlayed.unshift({ ...curSong });
+  if (recentPlayed.length > 20) recentPlayed.pop();
+  renderRecentlyPlayed();
+
+  var el = document.getElementById('si-' + vid) || document.getElementById('sil-' + vid);
+  if (el) el.classList.add('now-playing');
+
+  document.getElementById('np-thumb').src         = curSong.thumb;
+  document.getElementById('np-title').textContent   = curSong.title;
+  document.getElementById('np-ch').textContent      = curSong.ch;
+  document.getElementById('player-bar').style.display = 'block';
+  document.getElementById('dynamic-bg').style.backgroundImage = 'url(' + curSong.thumb + ')';
+  // Sync Now Playing View
+  document.getElementById('np-art').src             = curSong.thumb;
+  document.getElementById('np-bg').style.backgroundImage = 'url(' + curSong.thumb + ')';
+  document.getElementById('np-full-title').textContent = curSong.title;
+  document.getElementById('np-full-artist').textContent = curSong.ch;
+  var saved = library.some(s => s.videoId === vid);
+  var npHeart = document.getElementById('np-full-heart');
+  npHeart.textContent = saved ? '♥' : '♡';
+  npHeart.className = 'np-heart-btn' + (saved ? ' saved' : '');
+  setTime(0, 0);
+  savePrefs();
+
+  currentLyrics = [];
+  document.getElementById('lyrics-container').innerHTML = '<div class="lyric-line" style="text-align:center; margin-top:50px;">Loading lyrics...</div>';
+  fetchLyrics(curSong.title, curSong.ch);
+
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: curSong.title,
+      artist: curSong.ch,
+      artwork: [{ src: curSong.thumb, sizes: '512x512', type: 'image/jpeg' }]
+    });
+    setMSHandler('play',  function() { if (ytPlayer) ytPlayer.playVideo(); });
+    setMSHandler('pause', function() { if (ytPlayer) ytPlayer.pauseVideo(); });
+    setMSHandler('previoustrack', function() { playPrev(); });
+    setMSHandler('nexttrack',     function() { playNext(); });
+    setMSHandler('seekto', function(details) {
+      if (ytPlayer && ytPlayer.seekTo && details && typeof details.seekTime === 'number') {
+        ytPlayer.seekTo(details.seekTime, true);
+      }
+    });
+    setMSHandler('seekbackward', function(details) {
+      if (!ytPlayer) return;
+      try { ytPlayer.seekTo(Math.max(0, ytPlayer.getCurrentTime() - ((details && details.seekOffset) || 10)), true); } catch (e) {}
+    });
+    setMSHandler('seekforward', function(details) {
+      if (!ytPlayer) return;
+      try { ytPlayer.seekTo(ytPlayer.getCurrentTime() + ((details && details.seekOffset) || 10), true); } catch (e) {}
+    });
+  }
+
+  if (ytReady && ytPlayer && ytPlayer.loadVideoById) {
+    ytPlayer.loadVideoById(vid);
+    playing = true;
+    syncBtn();
+  } else {
+    var retryInt = setInterval(function() {
+      if (ytReady && ytPlayer && ytPlayer.loadVideoById) {
+        clearInterval(retryInt);
+        if (curSong && curSong.videoId === vid) {
+          ytPlayer.loadVideoById(vid);
+          playing = true;
+          syncBtn();
+        }
+      }
+    }, 500);
+  }
+}
+
+document.getElementById('pp-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  if (!ytPlayer || !curSong) return;
+  if (playing) ytPlayer.pauseVideo();
+  else         ytPlayer.playVideo();
+});
+
+document.getElementById('vol-slider').addEventListener('input', function(e) {
+  if (ytPlayer && ytPlayer.setVolume) {
+    ytPlayer.setVolume(e.target.value);
+  }
+  savePrefs();
+});
+
+document.getElementById('shuffle-btn').addEventListener('click', function() {
+  shuffleOn = !shuffleOn;
+  this.classList.toggle('active', shuffleOn);
+  document.getElementById('np-shuffle').classList.toggle('active', shuffleOn);
+  savePrefs();
+});
+
+document.getElementById('repeat-btn').addEventListener('click', function() {
+  repeatOn = !repeatOn;
+  this.classList.toggle('active', repeatOn);
+  document.getElementById('np-repeat').classList.toggle('active', repeatOn);
+  savePrefs();
+});
+
+function syncBtn() {
+  var pausePath = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+  var playPath  = '<path d="M8 5v14l11-7z"/>';
+  var icon = document.getElementById('pp-icon');
+  if (icon) icon.innerHTML = playing ? pausePath : playPath;
+  var npIcon = document.getElementById('np-pp-icon');
+  if (npIcon) npIcon.innerHTML = playing ? pausePath : playPath;
+  var art = document.getElementById('np-art');
+  if (art) { if (playing) art.classList.add('playing'); else art.classList.remove('playing'); }
+  if ('mediaSession' in navigator) {
+    try { navigator.mediaSession.playbackState = playing ? 'playing' : 'paused'; } catch (e) {}
+  }
+}
+
+function showEQ(on) {
+  document.getElementById('eq').style.display = on ? 'flex' : 'none';
+}
+
+// ── Progress ───────────────────────────────────────────
+function startProg() {
+  stopProg();
+  progTimer = setInterval(function() {
+    if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+    try { setTime(ytPlayer.getCurrentTime(), ytPlayer.getDuration()); }
+    catch(e) {}
+  }, 500);
+}
+function stopProg() { clearInterval(progTimer); progTimer = null; }
+
+function setTime(cur, dur) {
+  var pct = dur > 0 ? (cur / dur * 100) : 0;
+
+  // ── Mini Lyrics ticker ──
+  if (currentLyrics.length > 0) {
+    var activeIdx = -1;
+    for (var i = 0; i < currentLyrics.length; i++) {
+      if (cur >= currentLyrics[i].time - 0.4) activeIdx = i;
+      else break;
+    }
+    var ml = document.getElementById('mini-lyric');
+    if (activeIdx >= 0 && activeIdx !== miniLyricIdx) {
+      miniLyricIdx = activeIdx;
+      ml.textContent = currentLyrics[activeIdx].text;
+      ml.classList.remove('visible');
+      void ml.offsetWidth; // reflow
+      ml.classList.add('visible');
+    }
+    // Sync lyrics view scroll if open
+    if (document.getElementById('lyrics-view').classList.contains('active') && activeIdx >= 0) {
+      var prevActive = document.querySelector('.lyric-line.active');
+      var newActive = document.getElementById('lrc-' + activeIdx);
+      if (prevActive !== newActive) {
+        if (prevActive) prevActive.classList.remove('active');
+        if (newActive) {
+          newActive.classList.add('active');
+          var view = document.getElementById('lyrics-view');
+          var offset = newActive.offsetTop - (view.clientHeight / 2) + 40;
+          view.scrollTo({ top: offset, behavior: 'smooth' });
+        }
+      }
+    }
+  }
+
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('cur-t').textContent = fmt(cur);
+  document.getElementById('tot-t').textContent = fmt(dur);
+  // Sync full screen progress
+  document.getElementById('np-prog-fill').style.width = pct + '%';
+  document.getElementById('np-cur-t').textContent = fmt(cur);
+  document.getElementById('np-tot-t').textContent = fmt(dur);
+}
+
+document.getElementById('prog-bar').addEventListener('click', function(e) {
+  e.stopPropagation();
+  if (!ytPlayer || !curSong) return;
+  var rect = this.getBoundingClientRect();
+  var pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  try {
+    var dur = ytPlayer.getDuration();
+    if (dur > 0) { ytPlayer.seekTo(pct * dur, true); setTime(pct * dur, dur); }
+  } catch(e2) {}
+});
+
+// ── Library ────────────────────────────────────────────
+async function toggleSave(vid) {
+  var song = songs[vid] || library.find(function(s) { return s.videoId === vid; });
+  if (!song) return;
+
+  var isSaved = library.some(function(s) { return s.videoId === vid; });
+  try {
+    if (isSaved) {
+      syncHeart(vid, false);
+      await deleteDoc(doc(db, "library", vid));
+    } else {
+      syncHeart(vid, true);
+      // Always save HQ thumb
+      song.thumb = getHQThumb(vid);
+      await setDoc(doc(db, "library", vid), song);
+    }
+  } catch(e) {
+    console.error("Firebase error: ", e);
+    alert("Could not save to database. Make sure you started the database in Test Mode.");
+  }
+}
+
+function syncHeart(vid, saved) {
+  ['hb-', 'hbl-'].forEach(function(pfx) {
+    var el = document.getElementById(pfx + vid);
+    if (!el) return;
+    el.textContent = saved ? '♥' : '♡';
+    el.className   = 'btn-heart' + (saved ? ' saved' : '');
+  });
+}
+
+// ── Helpers ────────────────────────────────────────────
+function yfetch(url, onOk, onErr) {
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) return onErr(d.error.message || 'API error');
+      onOk(d);
+    })
+    .catch(function() { onErr('Network error — check your connection'); });
+}
+
+function show(id, html)        { document.getElementById(id).innerHTML = html; }
+function showErr(id, msg)      { showEmpty(id, '⚠️', 'Something went wrong', msg); }
+function showEmpty(id, ico, h, p) {
+  show(id, '<div class="s-box"><div class="ico">' + ico + '</div><h3>' + esc(h) + '</h3><p>' + esc(p) + '</p></div>');
+}
+function fmt(s) {
+  s = Math.floor(s || 0);
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function esc(str) {
+  return String(str || '')
+    .replace(/&/g,  '&amp;')
+    .replace(/</g,  '&lt;')
+    .replace(/>/g,  '&gt;')
+    .replace(/"/g,  '&quot;');
+}
+
+// ── Now Playing View ───────────────────────────────────
+function openNowPlaying() {
+  if (!curSong) return;
+  document.getElementById('now-playing-view').classList.add('open');
+}
+function closeNowPlaying() {
+  document.getElementById('now-playing-view').classList.remove('open');
+}
+
+// Open Now Playing by tapping player bar (not on buttons/inputs)
+document.getElementById('player-bar').addEventListener('click', function(e) {
+  if (e.target.closest('button') || e.target.closest('input')) return;
+  openNowPlaying();
+});
+
+// Close Now Playing via handle (swipe pill)
+document.getElementById('np-handle').addEventListener('click', closeNowPlaying);
+
+// Play/Pause in Now Playing
+document.getElementById('np-pp-btn').addEventListener('click', function() {
+  if (!ytPlayer || !curSong) return;
+  if (playing) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
+});
+
+// Previous: seek to 0 if >3s in, else play prev from history
+document.getElementById('np-prev').addEventListener('click', function() {
+  if (!ytPlayer) return;
+  try {
+    if (ytPlayer.getCurrentTime() > 3) { ytPlayer.seekTo(0, true); return; }
+  } catch(ex) {}
+  playPrev();
+});
+
+// Next
+document.getElementById('np-next').addEventListener('click', function() { playNext(); });
+
+// Shuffle
+document.getElementById('np-shuffle').addEventListener('click', function() {
+  shuffleOn = !shuffleOn;
+  this.classList.toggle('active', shuffleOn);
+  document.getElementById('shuffle-btn').classList.toggle('active', shuffleOn);
+  savePrefs();
+});
+
+// Repeat
+document.getElementById('np-repeat').addEventListener('click', function() {
+  repeatOn = !repeatOn;
+  this.classList.toggle('active', repeatOn);
+  document.getElementById('repeat-btn').classList.toggle('active', repeatOn);
+  savePrefs();
+});
+
+// Volume
+document.getElementById('np-vol-slider').addEventListener('input', function(e) {
+  if (ytPlayer && ytPlayer.setVolume) {
+    ytPlayer.setVolume(e.target.value);
+    document.getElementById('vol-slider').value = e.target.value;
+  }
+  savePrefs();
+});
+
+// Seek
+document.getElementById('np-prog-bar').addEventListener('click', function(e) {
+  if (!ytPlayer || !curSong) return;
+  var rect = this.getBoundingClientRect();
+  var pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  try { var dur = ytPlayer.getDuration(); if (dur > 0) ytPlayer.seekTo(pct * dur, true); } catch(ex) {}
+});
+
+// Heart in Now Playing
+document.getElementById('np-full-heart').addEventListener('click', function() {
+  if (!curSong) return;
+  toggleSave(curSong.videoId);
+});
+
+// Lyrics from Now Playing
+document.getElementById('np-lyrics-btn').addEventListener('click', function() {
+  document.getElementById('lyrics-view').classList.add('active');
+});
+
+// Queue from Now Playing
+document.getElementById('np-queue-btn').addEventListener('click', function() {
+  document.getElementById('queue-view').classList.add('active');
+  renderQueue();
+});
+
+// ── Lyrics Handlers ─────────────────────────────────────
+document.getElementById('lyrics-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  document.getElementById('lyrics-view').classList.add('active');
+  var active = document.querySelector('.lyric-line.active');
+  if (active) {
+    var view = document.getElementById('lyrics-view');
+    var offset = active.offsetTop - (view.clientHeight / 2) + 40;
+    view.scrollTo({ top: offset, behavior: 'auto' });
+  }
+});
+
+document.getElementById('close-lyrics').addEventListener('click', function() {
+  document.getElementById('lyrics-view').classList.remove('active');
+});
+
+function fetchLyrics(title, artist) {
+  var cleanTitle = title.replace(/\([^)]*\)|\[[^\]]*\]|official|video|lyrics|audio/gi, '').trim();
+  var url = 'https://lrclib.net/api/search?track_name=' + encodeURIComponent(cleanTitle) + '&artist_name=' + encodeURIComponent(artist);
+  fetch(url).then(r => r.json()).then(data => {
+    var track = (data || []).find(t => t.syncedLyrics);
+    if (track) parseLyrics(track.syncedLyrics);
+    else {
+      fetch('https://lrclib.net/api/search?q=' + encodeURIComponent(cleanTitle)).then(r => r.json()).then(d2 => {
+        var t2 = (d2 || []).find(t => t.syncedLyrics);
+        if (t2) parseLyrics(t2.syncedLyrics);
+        else showNoLyrics();
+      }).catch(showNoLyrics);
+    }
+  }).catch(showNoLyrics);
+}
+
+function showNoLyrics() {
+  document.getElementById('lyrics-container').innerHTML = '<div class="lyric-line" style="text-align:center; margin-top:50px;">No synced lyrics found</div>';
+}
+
+function parseLyrics(lrc) {
+  currentLyrics = [];
+  var lines = lrc.split('\n');
+  var html = '';
+  lines.forEach(line => {
+    var match = line.match(/^\[(\d{2}):(\d{2}\.\d{2,3})\](.*)/);
+    if (match) {
+      var text = match[3].trim();
+      if (text) {
+        var time = parseInt(match[1]) * 60 + parseFloat(match[2]);
+        currentLyrics.push({ time: time, text: text, index: currentLyrics.length });
+        html += '<div class="lyric-line" id="lrc-' + (currentLyrics.length - 1) + '">' + esc(text) + '</div>';
+      }
+    }
+  });
+  if (!currentLyrics.length) { showNoLyrics(); return; }
+  document.getElementById('lyrics-container').innerHTML = html;
+  currentLyrics.forEach(l => {
+    var el = document.getElementById('lrc-' + l.index);
+    if (el) el.addEventListener('click', () => { if (ytPlayer) ytPlayer.seekTo(l.time, true); });
+  });
+}
+
+// ── Queue & Playlists Logic ────────────────────────────────────
+function openCtx(e, vid) {
+  ctxSong = songs[vid] || library.find(s => s.videoId === vid);
+  // Also search playlists
+  if (!ctxSong) {
+    playlists.forEach(function(pl) {
+      if (pl.songs) {
+        var found = pl.songs.find(function(s) { return s.videoId === vid; });
+        if (found) ctxSong = found;
+      }
+    });
+  }
+  if (!ctxSong) return;
+  var menu = document.getElementById('ctx-menu');
+  menu.classList.add('active');
+  var x = e.clientX, y = e.clientY;
+  if (x + 180 > window.innerWidth) x -= 180;
+  if (y + 150 > window.innerHeight) y -= 150;
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+}
+
+document.addEventListener('click', function() {
+  document.getElementById('ctx-menu').classList.remove('active');
+});
+
+document.getElementById('ctx-add-queue').addEventListener('click', function() {
+  if (ctxSong) queue.push(ctxSong);
+  renderQueue();
+});
+document.getElementById('ctx-play-next').addEventListener('click', function() {
+  if (ctxSong) queue.unshift(ctxSong);
+  renderQueue();
+});
+document.getElementById('ctx-add-playlist').addEventListener('click', function() {
+  if (!ctxSong) return;
+  var html = '';
+  playlists.forEach(pl => {
+    html += '<div style="padding:10px; cursor:pointer; color:#ccc; border-radius:6px; transition: background 0.15s;" onmouseover="this.style.background=\'rgba(255,255,255,0.1)\'" onmouseout="this.style.background=\'\'" onclick="window.addToPl(\'' + pl.id + '\')">' + esc(pl.title) + '</div>';
+  });
+  if(!playlists.length) html = '<div style="color:#777; font-size:12px; padding:8px;">No custom playlists yet.</div>';
+  document.getElementById('pl-select-list').innerHTML = html;
+  document.getElementById('pl-modal').classList.add('active');
+});
+document.getElementById('close-pl-modal').addEventListener('click', function() {
+  document.getElementById('pl-modal').classList.remove('active');
+});
+document.getElementById('create-pl-btn').addEventListener('click', async function() {
+  var val = document.getElementById('new-pl-name').value.trim();
+  if (!val || !ctxSong) return;
+  ctxSong.thumb = getHQThumb(ctxSong.videoId);
+  var plId = 'pl_' + Date.now();
+  await setDoc(doc(db, "playlists", plId), { title: val, songs: [ctxSong] });
+  document.getElementById('pl-modal').classList.remove('active');
+  document.getElementById('new-pl-name').value = '';
+});
+
+window.addToPl = async function(plId) {
+  var pl = playlists.find(p => p.id === plId);
+  if (!pl) return;
+  if (!pl.songs) pl.songs = [];
+  if (!pl.songs.find(s => s.videoId === ctxSong.videoId)) {
+    ctxSong.thumb = getHQThumb(ctxSong.videoId);
+    pl.songs.push(ctxSong);
+    await setDoc(doc(db, "playlists", plId), { title: pl.title, songs: pl.songs });
+  }
+  document.getElementById('pl-modal').classList.remove('active');
+};
+
+function renderPlaylists() {
+  var html = '';
+  playlists.forEach(pl => {
+    var thumb = (pl.songs && pl.songs[0]) ? pl.songs[0].thumb : '';
+    html += '<div class="pl-card" onclick="window.openPlaylist(\'' + pl.id + '\')">';
+    if (thumb) html += '<img class="pl-thumb" src="' + esc(thumb) + '" onerror="this.style.display=\'none\'"/>';
+    else html += '<div class="pl-thumb" style="background: linear-gradient(135deg, #fa243c, #7b0020); display:flex; align-items:center; justify-content:center; font-size:32px;">🎵</div>';
+    html += '<div class="pl-title">' + esc(pl.title) + '</div>';
+    html += '<div class="pl-count">' + (pl.songs ? pl.songs.length : 0) + ' songs</div>';
+    html += '</div>';
+  });
+  if (!playlists.length) html = '<div style="color:#555; font-size:13px; padding: 8px 0;">No playlists yet. Use ⋮ on any song to create one.</div>';
+  document.getElementById('pl-grid').innerHTML = html;
+}
+
+// ── Playlist Detail Page ───────────────────────────────
+window.openPlaylist = function(plId) {
+  var pl = playlists.find(p => p.id === plId);
+  if (!pl) return;
+  curPlaylistId = plId;
+  renderPlaylistDetail(pl);
+  document.getElementById('playlist-detail-page').classList.add('active');
+};
+
+function renderPlaylistDetail(pl) {
+  document.getElementById('pl-detail-title').textContent = pl.title;
+  document.getElementById('pl-detail-count').textContent = (pl.songs ? pl.songs.length : 0) + ' songs';
+  
+  var html = '';
+  if (!pl.songs || !pl.songs.length) {
+    html = '<div class="s-box"><div class="ico">🎵</div><h3>No songs yet</h3><p>Add songs using the ⋮ menu on any song</p></div>';
+  } else {
+    pl.songs.forEach(function(song, idx) {
+      var isNow = curSong && curSong.videoId === song.videoId;
+      html += '<div class="song-item' + (isNow ? ' now-playing' : '') + '" style="margin-bottom:4px;">';
+      html += '<img class="song-thumb" src="' + esc(song.thumb) + '" />';
+      html += '<div class="song-info">';
+      html += '<div class="song-title">' + esc(song.title) + '</div>';
+      html += '<div class="song-ch">' + esc(song.ch) + '</div>';
+      html += '</div>';
+      html += '<button class="btn-more" onclick="window.removeSongFromPl(\'' + pl.id + '\',' + idx + ')" title="Remove" style="color:#e74c3c; font-size:20px;">&times;</button>';
+      html += '</div>';
+    });
+  }
+  document.getElementById('pl-detail-list').innerHTML = html;
+
+  // Wire up play clicks
+  if (pl.songs) {
+    pl.songs.forEach(function(song) {
+      var vid = song.videoId;
+      songs[vid] = song;
+    });
+  }
+
+  // Re-attach click listeners
+  if (pl.songs) {
+    pl.songs.forEach(function(song, idx) {
+      var items = document.getElementById('pl-detail-list').querySelectorAll('.song-item');
+      if (items[idx]) {
+        items[idx].addEventListener('click', function(e) {
+          if (e.target.tagName === 'BUTTON') return;
+          // Load all playlist songs as queue, then play clicked one
+          queue = pl.songs.filter(function(s) { return s.videoId !== song.videoId; });
+          playSong(song.videoId);
+        });
+      }
+    });
+  }
+}
+
+function closePlaylistDetail() {
+  document.getElementById('playlist-detail-page').classList.remove('active');
+  curPlaylistId = null;
+}
+
+document.getElementById('pl-detail-back').addEventListener('click', closePlaylistDetail);
+
+document.getElementById('pl-play-all-btn').addEventListener('click', function() {
+  var pl = playlists.find(p => p.id === curPlaylistId);
+  if (!pl || !pl.songs || !pl.songs.length) return;
+  // Ensure all songs are in songs dict
+  pl.songs.forEach(function(s) { songs[s.videoId] = s; });
+  queue = [...pl.songs.slice(1)];
+  playSong(pl.songs[0].videoId);
+});
+
+document.getElementById('pl-delete-btn').addEventListener('click', async function() {
+  if (!curPlaylistId) return;
+  var pl = playlists.find(p => p.id === curPlaylistId);
+  if (!pl) return;
+  if (!confirm('Delete playlist "' + pl.title + '"? This cannot be undone.')) return;
+  try {
+    await deleteDoc(doc(db, "playlists", curPlaylistId));
+    closePlaylistDetail();
+  } catch(e) {
+    console.error(e);
+    alert('Could not delete playlist.');
+  }
+});
+
+window.removeSongFromPl = async function(plId, songIdx) {
+  var pl = playlists.find(p => p.id === plId);
+  if (!pl || !pl.songs) return;
+  pl.songs.splice(songIdx, 1);
+  try {
+    await setDoc(doc(db, "playlists", plId), { title: pl.title, songs: pl.songs });
+  } catch(e) {
+    console.error(e);
+    alert('Could not remove song from playlist.');
+  }
+};
+
+// ── Queue UI ────────────────────────────────────────────
+document.getElementById('queue-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  document.getElementById('queue-view').classList.add('active');
+  renderQueue();
+});
+document.getElementById('close-queue').addEventListener('click', function() {
+  document.getElementById('queue-view').classList.remove('active');
+});
+
+function renderQueue() {
+  var html = '';
+  queue.forEach((s, i) => {
+    html += '<div class="song-item" style="margin-bottom:8px;">';
+    html += '<img class="song-thumb" src="' + esc(s.thumb) + '" />';
+    html += '<div class="song-info"><div class="song-title">' + esc(s.title) + '</div><div class="song-ch">' + esc(s.ch) + '</div></div>';
+    html += '<button class="btn-more" onclick="window.removeQueue(' + i + ')" style="color:#e74c3c; font-size:20px;">&times;</button>';
+    html += '</div>';
+  });
+  if (!queue.length) html = '<div class="s-box"><div class="ico">📭</div><h3>Queue is empty</h3><p>Add songs using the ⋮ menu</p></div>';
+  document.getElementById('queue-list').innerHTML = html;
+}
+
+window.removeQueue = function(i) {
+  queue.splice(i, 1);
+  renderQueue();
+};
+
+// ── Playback Navigation ─────────────────────────────────
+function playNext() {
+  if (queue.length > 0) {
+    var n = queue.shift();
+    songs[n.videoId] = n;
+    playSong(n.videoId);
+    renderQueue();
+  } else {
+    var allSongs = Object.values(songs);
+    if (!curSong || !allSongs.length) return;
+    if (shuffleOn) {
+      var others = allSongs.filter(s => s.videoId !== curSong.videoId);
+      if (others.length) {
+        var rand = others[Math.floor(Math.random() * others.length)];
+        playSong(rand.videoId);
+      }
+    } else {
+      var idx = allSongs.findIndex(s => s.videoId === curSong.videoId);
+      if (idx >= 0 && idx + 1 < allSongs.length) {
+        playSong(allSongs[idx + 1].videoId);
+      }
+    }
+  }
+}
+
+function playPrev() {
+  if (songHistory.length > 0) {
+    var prev = songHistory.pop();
+    playSong(prev.videoId, true); // true = don't re-add this song to history
+  } else {
+    // No history: go to previous in list
+    var allSongs = Object.values(songs);
+    if (!curSong || !allSongs.length) return;
+    var idx = allSongs.findIndex(s => s.videoId === curSong.videoId);
+    if (idx > 0) {
+      playSong(allSongs[idx - 1].videoId);
+    }
+  }
+}
+
+// ── Recently Played ────────────────────────────────────
+function renderRecentlyPlayed() {
+  var section = document.getElementById('recently-played-section');
+  var list = document.getElementById('recent-list');
+  if (!recentPlayed.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  var html = '';
+  recentPlayed.forEach(function(s) {
+    html += '<div class="recent-card" data-vid="' + s.videoId + '">';
+    html += '<img src="' + esc(s.thumb) + '" loading="lazy" />';
+    html += '<div class="recent-card-title">' + esc(s.title) + '</div>';
+    html += '<div class="recent-card-ch">' + esc(s.ch) + '</div>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
+  list.querySelectorAll('.recent-card').forEach(function(card) {
+    card.addEventListener('click', function() {
+      var vid = this.getAttribute('data-vid');
+      var song = recentPlayed.find(s => s.videoId === vid);
+      if (song) { songs[vid] = song; playSong(vid); }
+    });
+  });
+}
+
+// ── Sleep Timer ────────────────────────────────────────
+function openSleepPanel() {
+  document.getElementById('sleep-timer-panel').classList.add('open');
+}
+function closeSleepPanel() {
+  document.getElementById('sleep-timer-panel').classList.remove('open');
+}
+function setSleepTimer(mins) {
+  clearSleepTimer();
+  sleepMins = mins;
+  var endTime = Date.now() + mins * 60 * 1000;
+  var badge = document.getElementById('sleep-timer-badge');
+  badge.style.display = 'flex';
+  // Countdown tick
+  sleepTimer = setInterval(function() {
+    var remaining = Math.ceil((endTime - Date.now()) / 60000);
+    if (remaining <= 0) {
+      clearSleepTimer();
+      if (ytPlayer) ytPlayer.pauseVideo();
+      return;
+    }
+    badge.textContent = remaining;
+  }, 10000);
+  // Also set exact timeout (stored so changing the timer later can cancel it)
+  sleepTimeout = setTimeout(function() {
+    clearSleepTimer();
+    if (ytPlayer) ytPlayer.pauseVideo();
+  }, mins * 60 * 1000);
+  // Show countdown immediately
+  badge.textContent = mins;
+  closeSleepPanel();
+}
+function clearSleepTimer() {
+  if (sleepTimer)   { clearInterval(sleepTimer);  sleepTimer = null; }
+  if (sleepTimeout) { clearTimeout(sleepTimeout); sleepTimeout = null; }
+  sleepMins = 0;
+  var badge = document.getElementById('sleep-timer-badge');
+  badge.style.display = 'none';
+  // Remove active class from opts
+  document.querySelectorAll('.sleep-opt').forEach(function(b) { b.classList.remove('active'); });
+}
+
+document.getElementById('np-sleep-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  if (sleepTimer) { clearSleepTimer(); closeSleepPanel(); return; }
+  openSleepPanel();
+});
+document.querySelectorAll('.sleep-opt').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.sleep-opt').forEach(function(b) { b.classList.remove('active'); });
+    this.classList.add('active');
+    setSleepTimer(parseInt(this.getAttribute('data-min')));
+  });
+});
+document.getElementById('sleep-cancel-btn').addEventListener('click', function() {
+  clearSleepTimer();
+  closeSleepPanel();
+});
+// Close sleep panel on outside tap
+document.addEventListener('click', function(e) {
+  var panel = document.getElementById('sleep-timer-panel');
+  if (panel.classList.contains('open') && !panel.contains(e.target) && e.target.id !== 'np-sleep-btn' && !e.target.closest('#np-sleep-btn')) {
+    closeSleepPanel();
+  }
+});
+</script>
+</body>
+</html>
