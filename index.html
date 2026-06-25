@@ -29,7 +29,8 @@
   }
 
   #app {
-    height: 100vh;
+    height: 100vh;  /* fallback for older browsers */
+    height: 100dvh; /* tracks the real visible viewport on mobile, even when the browser's address/toolbar shows or hides */
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -562,6 +563,7 @@
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     flex-shrink: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .nav-btn {
     flex: 1; background: none; border: none;
@@ -614,7 +616,7 @@
         "player player";
     }
     #content { grid-area: content; }
-    #player-bar { grid-area: player; padding: 16px 24px 12px; }
+    #player-bar { grid-area: player; padding: 16px 24px calc(12px + env(safe-area-inset-bottom, 0px)); }
     #bottom-nav {
       grid-area: nav;
       flex-direction: column;
